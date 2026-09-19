@@ -1,0 +1,81 @@
+name: release
+
+# Composer packages are released by their tag: Packagist reads sarcio/shim
+# straight from this repository. On a `v*` tag this validates the manifest,
+# cuts the GitHub Release and tells Packagist to re-read the repository now
+# rather than at its next crawl.
+#
+# Secrets (on sarcioai/sarcio-php-shim), both optional. Without them Packagist
+# still picks the tag up through its own GitHub hook once the package is
+# submitted:
+#   PACKAGIST_USERNAME / PACKAGIST_TOKEN   the Packagist API token
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  packagist:
+    name: Packagist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to create the GitHub Release
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+
+      # composer.json carries no `version`: the tag is the version. The licence
+      # names it, so the two have to agree.
+      - name: Refuse a tag that does not match the licence
+        run: |
+          version="$(sed -nE 's/^Licensed Work:[[:space:]]+[^[:space:]]+[[:space:]]+([0-9][^,[:space:]]*),.*/\1/p' LICENSE)"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::tag $TAG does not match the LICENSE version $version"
+            exit 1
+          fi
+
+      - name: Validate the manifest
+        run: composer validate --strict
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 ||
+            gh release create "$TAG" --title "sarcio/shim ${TAG#v}" \
+              --notes "Install with \`composer require sarcio/shim:^${TAG#v}\`."
+
+      - name: Tell Packagist to update
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_TOKEN: ${{ secrets.PACKAGIST_TOKEN }}
+        run: |
+          if [ -z "$PACKAGIST_USERNAME" ] || [ -z "$PACKAGIST_TOKEN" ]; then
+            echo "::notice::no Packagist token set; Packagist picks the tag up through its own GitHub hook"
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST \
+            -H 'content-type: application/json' \
+            --url-query "username=$PACKAGIST_USERNAME" \
+            --url-query "apiToken=$PACKAGIST_TOKEN" \
+            'https://packagist.org/api/update-package' \
+            -d '{"repository":{"url":"https://github.com/sarcioai/sarcio-php-shim"}}'

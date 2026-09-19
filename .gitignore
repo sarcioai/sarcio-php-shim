@@ -1,0 +1,3 @@
+# A Composer install during development; a library ships no lock file.
+vendor/
+composer.lock
