@@ -1,6 +1,6 @@
 {
   "name": "sarcio/shim",
-  "description": "Sarcio PHP shim — Laravel middleware and Symfony kernel listener over the v1 sidecar protocol",
+  "description": "Connects a Laravel or Symfony application to Sarcio, so approved server-side fixes take effect without a deploy.",
   "type": "library",
   "license": "BUSL-1.1",
   "homepage": "https://www.sarcio.io",
