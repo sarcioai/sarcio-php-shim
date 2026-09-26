@@ -39,7 +39,7 @@ final class FileSwapApplier
     ) {
         $this->state = $state ?? new InMemoryFileSwapState();
         if (!is_dir($this->backupDir)) {
-            @mkdir($this->backupDir, 0700, true);
+            @mkdir($this->backupDir, 0700, true); // phpcs:ignore WordPress.WP.AlternativeFunctions -- the backup directory for signed file swaps, kept beside the app on every host the shim runs on
         }
     }
 
@@ -142,7 +142,7 @@ final class FileSwapApplier
         }
         $dir = dirname($abs);
         if (!is_dir($dir)) {
-            @mkdir($dir, 0755, true);
+            @mkdir($dir, 0755, true); // phpcs:ignore WordPress.WP.AlternativeFunctions -- a signed file swap lands in the app's own source tree, which WP_Filesystem cannot express
         }
         if (@file_put_contents($abs, $content) === false) {
             return false;
@@ -161,10 +161,10 @@ final class FileSwapApplier
         }
         if ($state['existed']) {
             @copy($state['backup'], $state['path']);
-            @unlink($state['backup']);
+            @unlink($state['backup']); // phpcs:ignore WordPress.WP.AlternativeFunctions -- restoring a signed file swap removes the backup the shim itself wrote
         } else {
-            @unlink($state['path']);
-            @unlink($state['backup'] . '.absent');
+            @unlink($state['path']); // phpcs:ignore WordPress.WP.AlternativeFunctions -- restoring a signed file swap removes the file the shim itself wrote
+            @unlink($state['backup'] . '.absent'); // phpcs:ignore WordPress.WP.AlternativeFunctions -- restoring a signed file swap removes the marker the shim itself wrote
         }
         $this->invalidate($state['path']);
         $this->state->forget($patchId);

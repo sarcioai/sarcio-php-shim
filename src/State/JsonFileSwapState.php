@@ -22,7 +22,7 @@ final class JsonFileSwapState implements FileSwapState
     {
         $dir = dirname($this->path);
         if (!is_dir($dir)) {
-            @mkdir($dir, 0700, true);
+            @mkdir($dir, 0700, true); // phpcs:ignore WordPress.WP.AlternativeFunctions -- the shim also runs outside WordPress; the state file lives beside the app, not in the WP filesystem
         }
     }
 
@@ -93,9 +93,9 @@ final class JsonFileSwapState implements FileSwapState
         if (@file_put_contents($tmp, $encoded, LOCK_EX) === false) {
             return;
         }
-        @chmod($tmp, 0600);
-        if (!@rename($tmp, $this->path)) {
-            @unlink($tmp);
+        @chmod($tmp, 0600); // phpcs:ignore WordPress.WP.AlternativeFunctions -- an atomic replace of the shim's own state file, which WP_Filesystem cannot express
+        if (!@rename($tmp, $this->path)) { // phpcs:ignore WordPress.WP.AlternativeFunctions -- an atomic replace of the shim's own state file, which WP_Filesystem cannot express
+            @unlink($tmp); // phpcs:ignore WordPress.WP.AlternativeFunctions -- removing the temp file of a failed atomic replace
         }
     }
 }

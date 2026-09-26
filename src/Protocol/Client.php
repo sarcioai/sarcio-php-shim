@@ -162,7 +162,7 @@ final class Client
     /** Send a raw line. */
     public function sendRaw(string $text): void
     {
-        @fwrite($this->stream, $text);
+        @fwrite($this->stream, $text); // phpcs:ignore WordPress.WP.AlternativeFunctions -- a write to the sidecar's local socket, not to a file
     }
 
     /** Read one frame with the given budget. */
@@ -174,7 +174,7 @@ final class Client
     public function close(): void
     {
         if (is_resource($this->stream)) {
-            @fclose($this->stream);
+            @fclose($this->stream); // phpcs:ignore WordPress.WP.AlternativeFunctions -- closing the sidecar's local socket, not a file
         }
     }
 
@@ -188,7 +188,7 @@ final class Client
         if (!is_resource($this->stream)) {
             return false;
         }
-        return @fwrite($this->stream, Codec::encode($frame)) !== false;
+        return @fwrite($this->stream, Codec::encode($frame)) !== false; // phpcs:ignore WordPress.WP.AlternativeFunctions -- a write to the sidecar's local socket, not to a file
     }
 
     private function read(float $budgetSec): ?array
