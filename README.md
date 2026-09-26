@@ -3,7 +3,8 @@
 Connects a PHP application to [Sarcio](https://www.sarcio.io), so an approved
 server-side fix takes effect on a running app without a deploy. It ships a
 Laravel middleware and a Symfony kernel listener, has no third-party runtime
-dependencies, and works with the Sarcio sidecar running on the same host.
+dependencies, and works either with the Sarcio sidecar running on the same
+host or, where a host cannot run one, on its own (see "Without the sidecar").
 
 Setup guides, the full settings reference and troubleshooting are in the
 [Sarcio docs](https://www.sarcio.io/docs).
@@ -11,13 +12,14 @@ Setup guides, the full settings reference and troubleshooting are in the
 ## Requirements
 
 - PHP 8.1 or newer with `ext-json`
-- The Sarcio sidecar on the same host (see the [docs](https://www.sarcio.io/docs))
+- The Sarcio sidecar on the same host (see the [docs](https://www.sarcio.io/docs)),
+  or `ext-sodium` (bundled with PHP) to run without one
 - Recommended under PHP-FPM: `ext-apcu`, so workers share one cached lookup
 
 ## Install (Laravel)
 
 ```bash
-composer require sarcio/shim:^0.2
+composer require sarcio/shim:^0.3
 ```
 
 ```dotenv
@@ -32,6 +34,33 @@ Register `Sarcio\Shim\Laravel\SarcioServiceProvider` (auto-discovered) and add
 
 For Symfony, register `Sarcio\Shim\Symfony\SarcioKernelListener` on
 `kernel.request` and `kernel.response`.
+
+## Without the sidecar
+
+On a host where you cannot run a service (shared or managed hosting), the
+shim can fetch your site's signed fixes from Sarcio itself, verify them
+against your workspace's signing key, and decide each request in process.
+Give it your workspace address, the site key and the site's sidecar key
+(both under Sites in the dashboard) instead of a socket:
+
+```php
+use Sarcio\Shim\Cache\ApcuRouteSetCache;
+use Sarcio\Shim\Shim;
+use Sarcio\Shim\Transport\InMemoryPatchCache;
+use Sarcio\Shim\Transport\PullTransport;
+
+$transport = new PullTransport('https://acme.sarcio.io', 'pk_your_site', 'sk_your_site', new InMemoryPatchCache());
+$shim = new Shim('', 'pk_your_site', new ApcuRouteSetCache(), transport: $transport);
+```
+
+A new fix takes effect within the refresh window (60 seconds by default)
+rather than in seconds, and everything else behaves the same: a fix that
+does not verify never applies, a fix past its expiry stops on its own, and
+if Sarcio cannot be reached the last verified set keeps serving. File-level
+fixes still need the sidecar. Under PHP-FPM, keep the verified set in a
+store your workers share (implement `Transport\PatchCache` over APCu or
+your framework's cache) so a pull happens once per window, not once per
+request.
 
 ## Using a fix in your own code
 

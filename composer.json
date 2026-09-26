@@ -27,6 +27,7 @@
   },
   "suggest": {
     "ext-apcu": "Shared route-set caching across PHP-FPM workers (recommended)",
+    "ext-sodium": "Verifying fixes in process, to run without the sidecar",
     "illuminate/http": "Laravel middleware adapter",
     "symfony/http-kernel": "Symfony kernel-listener adapter"
   },

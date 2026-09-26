@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Sarcio\Shim;
 
-use Sarcio\Shim\Protocol\Client;
+use Sarcio\Shim\Transport\SidecarTransport;
+use Sarcio\Shim\Transport\Transport;
 
 /**
  * The framework-neutral PHP shim core. Laravel middleware and the Symfony
  * kernel listener are thin adapters over this: it owns the route-set cache, the
- * synchronous route check, and the fail-closed `evaluate` round-trip to the
- * sidecar. It never blocks the request longer than the evaluate budget, and any
- * failure means original behavior runs.
+ * synchronous route check, and the fail-closed `evaluate` round-trip to its
+ * transport: the sidecar over a local socket, or a direct pull from the
+ * control plane verified and decided in process ({@see Transport}). It never
+ * blocks the request longer than the evaluate budget, and any failure means
+ * original behavior runs.
  */
 final class Shim
 {
@@ -28,20 +31,31 @@ final class Shim
     /** The sidecar's conventional socket (the packaged systemd unit's RuntimeDirectory), as a stream DSN. */
     public const DEFAULT_DSN = 'unix:///run/sarcio/sarcio.sock';
 
+    private readonly Transport $transport;
+
     /**
      * @param string $dsn stream DSN, e.g. "unix:///run/sarcio/sarcio.sock" or "tcp://127.0.0.1:7071"
+     *                    (ignored when a transport is given)
+     * @param Transport|null $transport where routes and verdicts come from; the sidecar at `$dsn` by default
      */
     public function __construct(
-        private readonly string $dsn,
+        string $dsn,
         private readonly string $siteKey,
         private readonly RouteSetCache $cache,
         private readonly float $evaluateTimeoutSec = 0.025,
         private readonly int $routeSetTtlSec = 5,
-        private readonly float $connectTimeoutSec = 1.0,
-        private readonly string $framework = '',
+        float $connectTimeoutSec = 1.0,
+        string $framework = '',
         private readonly int $bodyCapBytes = 65536,
-        private readonly string $shimToken = '',
+        string $shimToken = '',
+        ?Transport $transport = null,
     ) {
+        $this->transport = $transport ?? new SidecarTransport($dsn, $siteKey, $connectTimeoutSec, $framework, $shimToken);
+    }
+
+    public function transport(): Transport
+    {
+        return $this->transport;
     }
 
     public static function routeKey(string $method, string $path): string
@@ -73,9 +87,9 @@ final class Shim
     }
 
     /**
-     * Ask the sidecar for a verdict. Returns null to fail closed (run original).
+     * Ask the transport for a verdict. Returns null to fail closed (run original).
      * Callers gate this behind shouldEvaluate; a call for an unpatched route or
-     * an unreachable sidecar is a safe null.
+     * an unreachable transport is a safe null.
      *
      * @param array{headers?:array<string,mixed>,body?:mixed,preview?:string} $context
      */
@@ -84,17 +98,6 @@ final class Shim
         $routeId = self::routeKey($method, $path);
         if (!in_array($routeId, $this->routeSet(), true)) {
             return null;
-        }
-        $client = Client::connect($this->dsn, $this->connectTimeoutSec);
-        if ($client === null) {
-            return null; // fail closed
-        }
-        // When a shim token is configured the sidecar requires an authenticated
-        // hello on the connection before it will evaluate. (Without a token the
-        // hello is skipped to save the extra round-trip on the hot path.)
-        if ($this->shimToken !== '' && $client->hello($this->siteKey, 'php', $this->framework, '0.1.0', $this->shimToken) === null) {
-            $client->close();
-            return null; // fail closed (e.g. unauthorized)
         }
         $envelope = ['method' => strtoupper($method), 'path' => $path];
         if (isset($context['headers']) && is_array($context['headers'])) {
@@ -107,9 +110,7 @@ final class Shim
         if (!empty($context['preview']) && is_string($context['preview'])) {
             $envelope['preview'] = $context['preview'];
         }
-        $verdict = $client->evaluate($routeId, $envelope, $this->evaluateTimeoutSec);
-        $client->close();
-        return $verdict;
+        return $this->transport->evaluate($routeId, $envelope, $this->evaluateTimeoutSec);
     }
 
     /**
@@ -149,12 +150,6 @@ final class Shim
 
     private function fetchRouteSet(): array
     {
-        $client = Client::connect($this->dsn, $this->connectTimeoutSec);
-        if ($client === null) {
-            return [];
-        }
-        $res = $client->hello($this->siteKey, 'php', $this->framework, '0.1.0', $this->shimToken);
-        $client->close();
-        return is_array($res) ? ($res['routes'] ?? []) : [];
+        return $this->transport->routes();
     }
 }
