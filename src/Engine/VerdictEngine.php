@@ -38,7 +38,8 @@ final class VerdictEngine
             $ops,
             static fn (array $op): bool => in_array($op['op'] ?? null, ['defaultValue', 'stripField'], true),
         ));
-        if ($bodyOps !== [] && is_array($body) && ($body === [] || !array_is_list($body))) {
+        // Only an object body has fields to default or strip; a JSON list does not.
+        if ($bodyOps !== [] && is_array($body) && ($body === [] || array_keys($body) !== range(0, count($body) - 1))) {
             $overrides['body'] = self::applyBodyOps($bodyOps, $body);
             $touched = true;
         }

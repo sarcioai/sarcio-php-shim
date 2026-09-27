@@ -163,7 +163,7 @@ final class PullTransport implements Transport
             return null;
         }
         $body = json_decode($res['body'], true);
-        return is_array($body) && array_is_list($body) ? $body : null;
+        return is_array($body) && ($body === [] || array_keys($body) === range(0, count($body) - 1)) ? $body : null;
     }
 
     /** @return array<string,string> */
